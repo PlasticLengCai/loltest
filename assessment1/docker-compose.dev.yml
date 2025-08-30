@@ -1,0 +1,11 @@
+services:
+  app:
+    build: .
+    ports:
+      - "80:3000"
+    environment:
+      - SECRET_KEY=${SECRET_KEY}
+    volumes:
+      - ./database:/app/database
+    restart: unless-stopped
+

@@ -1,0 +1,210 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>cab432 assessmen1</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:980px;margin:0 auto;padding:24px}
+h1{font-size:20px}
+section{border:1px solid #ddd;border-radius:12px;padding:16px;margin-bottom:16px}
+button,input[type="submit"]{padding:8px 12px;border:1px solid #333;border-radius:8px;background:#fff;cursor:pointer}
+input,select{padding:8px;border:1px solid #ccc;border-radius:8px}
+table{border-collapse:collapse;width:100%}
+th,td{border-bottom:1px solid #eee;padding:8px;text-align:left}
+.badge{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid #999;font-size:12px}
+.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.small{font-size:12px;color:#666}
+pre{white-space:pre-wrap}
+</style>
+</head>
+<body>
+<h1>CAB432 Media Service</h1>
+
+<section>
+<div class="row">
+<div>Token</div>
+<input id="token" style="width:520px" readonly>
+<button id="btnClear">Clear</button>
+</div>
+<div class="row" style="margin-top:8px">
+<input id="username" placeholder="username" value="admin">
+<input id="password" type="password" placeholder="password" value="admin">
+<button id="btnLogin">Login</button>
+<span id="whoami" class="small"></span>
+</div>
+</section>
+
+<section>
+<div class="row">
+<form id="formVideo">
+<input type="file" id="videoFile" accept="video/*" required>
+<input type="submit" value="Upload Video">
+</form>
+<form id="formImage">
+<input type="file" id="imageFile" accept="image/*" required>
+<input type="submit" value="Upload Image">
+</form>
+<button id="btnRefresh">Refresh Lists</button>
+</div>
+</section>
+
+<section>
+<div class="row">
+<div class="row">
+<label>Videos</label>
+<select id="videoStatus">
+<option value="">all</option>
+<option value="uploaded">uploaded</option>
+<option value="processing">processing</option>
+<option value="completed">completed</option>
+<option value="failed">failed</option>
+</select>
+</div>
+</div>
+<table id="tblVideos">
+<thead><tr><th>ID</th><th>Owner</th><th>Name</th><th>Status</th><th>Actions</th></tr></thead>
+<tbody></tbody>
+</table>
+</section>
+
+<section>
+<div class="row">
+<div>Images</div>
+</div>
+<table id="tblImages">
+<thead><tr><th>ID</th><th>Owner</th><th>Name</th><th>Thumb</th><th>Actions</th></tr></thead>
+<tbody></tbody>
+</table>
+</section>
+
+<script>
+const base = location.origin
+const $ = s => document.querySelector(s)
+const tokenInput = $('#token')
+const setToken = t => { localStorage.setItem('token', t||''); tokenInput.value = t||'' }
+const getToken = () => localStorage.getItem('token')||''
+const auth = () => ({ 'Authorization': 'Bearer '+getToken() })
+
+async function login(){
+  const fd = new FormData()
+  fd.append('username',$('#username').value)
+  fd.append('password',$('#password').value)
+  const res = await fetch(base+'/login',{method:'POST',body:fd})
+  if(!res.ok){ alert(await res.text()); return }
+  const j = await res.json()
+  setToken(j.access_token)
+  await refreshWho()
+  await refreshAll()
+}
+
+async function refreshWho(){
+  const t = getToken()
+  if(!t){ $('#whoami').textContent=''; return }
+  try{
+    const r = await fetch(base+'/whoami',{headers:auth()})
+    if(!r.ok){ setToken(''); $('#whoami').textContent=''; return }
+    const j = await r.json()
+    $('#whoami').textContent = j.user+' ('+j.role+')'
+  }catch(e){ setToken(''); $('#whoami').textContent='' }
+}
+
+async function uploadVideo(e){
+  e.preventDefault()
+  if(!getToken()){ alert('login first'); return }
+  const fd = new FormData()
+  const f = $('#videoFile').files[0]
+  if(!f){ return }
+  fd.append('file', f)
+  const r = await fetch(base+'/upload/video',{method:'POST',headers:auth(),body:fd})
+  if(!r.ok){ alert(await r.text()); return }
+  await refreshVideos()
+}
+
+async function uploadImage(e){
+  e.preventDefault()
+  if(!getToken()){ alert('login first'); return }
+  const fd = new FormData()
+  const f = $('#imageFile').files[0]
+  if(!f){ return }
+  fd.append('file', f)
+  const r = await fetch(base+'/upload/image',{method:'POST',headers:auth(),body:fd})
+  if(!r.ok){ alert(await r.text()); return }
+  await refreshImages()
+}
+
+function rowVideo(v){
+  const tr = document.createElement('tr')
+  const btnT = document.createElement('button')
+  btnT.textContent='Transcode'
+  btnT.onclick = async ()=>{
+    const r = await fetch(base+'/transcode/'+v.id,{method:'POST',headers:auth()})
+    if(!r.ok){ alert(await r.text()); return }
+    await refreshVideos()
+  }
+  const btnD1 = document.createElement('button')
+  btnD1.textContent='Download Source'
+  btnD1.onclick = ()=>{ window.location = base+'/videos/'+v.id+'/download?token='+getToken() }
+  const btnD2 = document.createElement('button')
+  btnD2.textContent='Download 720p'
+  btnD2.onclick = ()=>{ window.location = base+'/videos/'+v.id+'/download_transcoded?token='+getToken() }
+  tr.innerHTML = '<td>'+v.id+'</td><td><span class="badge">'+v.owner+'</span></td><td>'+v.orig_filename+'</td><td>'+v.status+'</td><td></td>'
+  const td = tr.querySelectorAll('td')[4]
+  td.appendChild(btnT)
+  td.appendChild(document.createTextNode(' '))
+  td.appendChild(btnD1)
+  td.appendChild(document.createTextNode(' '))
+  td.appendChild(btnD2)
+  return tr
+}
+
+function rowImage(v){
+  const tr = document.createElement('tr')
+  const thumb = v.thumb_filename ? '<img src="'+base+'/images/'+v.id+'/thumbnail?token='+getToken()+'" width="72" height="72">' : ''
+  const btnD = document.createElement('button')
+  btnD.textContent='Download'
+  btnD.onclick = ()=>{ window.location = base+'/images/'+v.id+'/download?token='+getToken() }
+  tr.innerHTML = '<td>'+v.id+'</td><td><span class="badge">'+v.owner+'</span></td><td>'+v.orig_filename+'</td><td>'+thumb+'</td><td></td>'
+  tr.querySelectorAll('td')[4].appendChild(btnD)
+  return tr
+}
+
+async function refreshVideos(){
+  if(!getToken()){ $('#tblVideos tbody').innerHTML=''; return }
+  const s = $('#videoStatus').value
+  const url = s ? base+'/videos?limit=50&offset=0&status='+encodeURIComponent(s) : base+'/videos?limit=50&offset=0'
+  const r = await fetch(url,{headers:auth()})
+  if(!r.ok){ setToken(''); await refreshWho(); return }
+  const j = await r.json()
+  const tbody = $('#tblVideos tbody')
+  tbody.innerHTML = ''
+  j.items.forEach(x=>tbody.appendChild(rowVideo(x)))
+}
+
+async function refreshImages(){
+  if(!getToken()){ $('#tblImages tbody').innerHTML=''; return }
+  const r = await fetch(base+'/images?limit=50&offset=0',{headers:auth()})
+  if(!r.ok){ setToken(''); await refreshWho(); return }
+  const j = await r.json()
+  const tbody = $('#tblImages tbody')
+  tbody.innerHTML = ''
+  j.items.forEach(x=>tbody.appendChild(rowImage(x)))
+}
+
+async function refreshAll(){
+  await refreshWho()
+  await refreshVideos()
+  await refreshImages()
+}
+
+document.querySelector('#btnLogin').onclick = login
+document.querySelector('#btnRefresh').onclick = refreshAll
+document.querySelector('#btnClear').onclick = ()=>{ setToken(''); refreshAll() }
+document.querySelector('#formVideo').addEventListener('submit', uploadVideo)
+document.querySelector('#formImage').addEventListener('submit', uploadImage)
+tokenInput.value = getToken()
+refreshAll()
+</script>
+</body>
+</html>
+

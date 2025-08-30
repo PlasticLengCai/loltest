@@ -1,0 +1,20 @@
+services:
+  app:
+    image: 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/n12005371-assessment1:test3.2
+    container_name: assessment1-app-1
+    restart: unless-stopped
+
+    working_dir: /app
+
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+    ports:
+      - "80:8000"
+
+    volumes:
+      - ./database:/app/database
+
+    environment:
+      SECRET_KEY: ${SECRET_KEY:-please_change_me_to_a_random_64_chars}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-60}
+      ALGORITHM: ${ALGORITHM:-HS256}
